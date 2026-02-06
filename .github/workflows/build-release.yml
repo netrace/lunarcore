@@ -23,9 +23,9 @@ jobs:
             python3-venv cmake ninja-build ccache libffi-dev libssl-dev dfu-util \
             libusb-1.0-0 pkg-config
 
-      - name: Install espup
+      - name: Install espup and espflash
         run: |
-          cargo install espup
+          RUSTUP_TOOLCHAIN=stable cargo install espup espflash
           espup install
           . $HOME/export-esp.sh
           echo "$HOME/.rustup/toolchains/esp/bin" >> $GITHUB_PATH
@@ -37,9 +37,6 @@ jobs:
           echo "ESP_IDF_VERSION=v5.2.1" >> $GITHUB_ENV
           echo "ESP_IDF_SDKCONFIG_DEFAULTS=sdkconfig.defaults" >> $GITHUB_ENV
           echo "ESP_IDF_CMAKE_GENERATOR=Ninja" >> $GITHUB_ENV
-
-      - name: Install espflash
-        run: cargo install espflash
 
       - name: Build release
         run: |
