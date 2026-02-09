@@ -12,7 +12,10 @@ Protocol is auto-detected from the first bytes over serial or BLE.
 
 ## Hardware
 
-Heltec WiFi LoRa 32 V3 (ESP32-S3 + SX1262)
+Supported boards:
+
+- Heltec WiFi LoRa 32 V3 (ESP32-S3 + SX1262)
+- Seeed XIAO ESP32S3 + Wio-SX1262
 
 ## Flash (prebuilt)
 
@@ -28,8 +31,14 @@ esptool.py --chip esp32s3 -p PORT write_flash 0x0 lunarcore-esp32s3.bin
 ```bash
 espup install
 . ~/export-esp.sh
-cargo build --release
+cargo build --release --features board-heltec
 espflash flash target/xtensa-esp32s3-espidf/release/lunarcore --monitor
+```
+
+To build for the Seeed XIAO ESP32S3 + Wio-SX1262:
+
+```bash
+cargo build --release --features board-xiao-wio
 ```
 
 ## Repeater

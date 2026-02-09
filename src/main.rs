@@ -10,6 +10,7 @@ mod display;
 mod transport;
 mod session;
 mod onion;
+mod boards;
 
 
 use esp_idf_hal::delay::FreeRtos;
@@ -18,11 +19,16 @@ use esp_idf_sys as _;
 use esp_idf_hal::prelude::*;
 use esp_idf_hal::gpio::*;
 use esp_idf_hal::spi::{SpiDeviceDriver, SpiDriverConfig};
+#[cfg(feature = "board-heltec")]
 use esp_idf_hal::i2c::{I2cConfig, I2cDriver};
 use esp_idf_hal::uart::UartDriver;
+#[cfg(feature = "board-heltec")]
 use esp_idf_hal::adc::attenuation::DB_11;
+#[cfg(feature = "board-heltec")]
 use esp_idf_hal::adc::oneshot::config::AdcChannelConfig;
+#[cfg(feature = "board-heltec")]
 use esp_idf_hal::adc::oneshot::{AdcDriver, AdcChannelDriver};
+#[cfg(feature = "board-heltec")]
 use display::StatusDisplay;
 use core::sync::atomic::{AtomicBool, AtomicU16, AtomicU32, Ordering};
 use crypto::sha256::Sha256;
@@ -37,6 +43,13 @@ use ble::{BleManager, ServiceType};
 use session::{SessionManager, Session, SessionParams, SessionError, MessageHeader};
 use onion::{OnionRouter, OnionRoute, RouteHop, OnionPacket, OnionError, RouteBuilder};
 use transport::{WirePacket, AddressTranslator, UniversalAddress};
+use boards::SelectedBoard;
+
+#[cfg(all(feature = "board-heltec", feature = "board-xiao-wio"))]
+compile_error!("Select only one board feature: board-heltec or board-xiao-wio.");
+
+#[cfg(not(any(feature = "board-heltec", feature = "board-xiao-wio")))]
+compile_error!("Select a board feature: board-heltec or board-xiao-wio.");
 
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -104,27 +117,7 @@ const LED_BLINK_ACTIVE: u32 = 500;
 const LED_BLINK_ERROR: u32 = 100;
 
 
-const PIN_SPI_MOSI: i32 = 10;
-const PIN_SPI_MISO: i32 = 11;
-const PIN_SPI_SCK: i32 = 9;
-
-
-const PIN_LORA_NSS: i32 = 8;
-const PIN_LORA_RST: i32 = 12;
-const PIN_LORA_BUSY: i32 = 13;
-const PIN_LORA_DIO1: i32 = 14;
-
-
-const PIN_LED: i32 = 35;
-const PIN_VEXT: i32 = 36;
-
-
-const PIN_BATTERY_ADC: i32 = 1;
-
-
-const PIN_I2C_SDA: i32 = 17;
-const PIN_I2C_SCL: i32 = 18;
-const PIN_OLED_RST: i32 = 21;
+ 
 
 
 static DIO1_TRIGGERED: AtomicBool = AtomicBool::new(false);
@@ -1985,38 +1978,54 @@ fn run_lunarcore() -> ! {
 
     let peripherals = Peripherals::take().unwrap();
 
+    log::info!("[INIT] Board: {}", SelectedBoard::NAME);
 
-    let mut led_pin = PinDriver::output(peripherals.pins.gpio35).unwrap();
-    led_pin.set_low().unwrap();
-    let mut vext_pin = PinDriver::output(peripherals.pins.gpio36).unwrap();
-    vext_pin.set_low().unwrap();
-    drop(vext_pin);
-    log::info!("[INIT] GPIO OK");
+    #[cfg(feature = "board-heltec")]
+    let mut led_pin = {
+        let mut led = PinDriver::output(peripherals.pins.gpio35).unwrap();
+        led.set_low().unwrap();
+        let mut vext_pin = PinDriver::output(peripherals.pins.gpio36).unwrap();
+        vext_pin.set_low().unwrap();
+        drop(vext_pin);
+        log::info!("[INIT] GPIO OK");
+        led
+    };
 
+    #[cfg(feature = "board-heltec")]
+    let mut status_display = {
+        let mut oled_rst = PinDriver::output(peripherals.pins.gpio21).unwrap();
+        oled_rst.set_low().unwrap();
+        FreeRtos::delay_ms(10);
+        oled_rst.set_high().unwrap();
+        FreeRtos::delay_ms(10);
+        let i2c_config = I2cConfig::new().baudrate(Hertz(400_000));
+        let i2c = I2cDriver::new(
+            peripherals.i2c0,
+            peripherals.pins.gpio17,
+            peripherals.pins.gpio18,
+            &i2c_config,
+        ).unwrap();
+        let mut display = StatusDisplay::new(i2c);
+        let _ = display.init();
+        log::info!("[INIT] OLED OK");
 
-    let mut oled_rst = PinDriver::output(peripherals.pins.gpio21).unwrap();
-    oled_rst.set_low().unwrap();
-    FreeRtos::delay_ms(10);
-    oled_rst.set_high().unwrap();
-    FreeRtos::delay_ms(10);
-    let i2c_config = I2cConfig::new().baudrate(Hertz(400_000));
-    let i2c = I2cDriver::new(
-        peripherals.i2c0,
-        peripherals.pins.gpio17,
-        peripherals.pins.gpio18,
-        &i2c_config,
-    ).unwrap();
-    let mut status_display = StatusDisplay::new(i2c);
-    let _ = status_display.init();
-    log::info!("[INIT] OLED OK");
+        let _ = display.boot_animation(&mut |ms| FreeRtos::delay_ms(ms));
+        display
+    };
 
+    #[cfg(feature = "board-xiao-wio")]
+    let mut led_pin = {
+        let mut led = PinDriver::output(peripherals.pins.gpio21).unwrap();
+        led.set_low().unwrap();
+        log::info!("[INIT] GPIO OK (no VEXT/OLED)");
+        led
+    };
 
-    let _ = status_display.boot_animation(&mut |ms| FreeRtos::delay_ms(ms));
-
-
+    #[cfg(feature = "board-heltec")]
     let spi_config = esp_idf_hal::spi::config::Config::new()
         .baudrate(Hertz(8_000_000))
         .data_mode(embedded_hal::spi::MODE_0);
+    #[cfg(feature = "board-heltec")]
     let spi = SpiDeviceDriver::new_single(
         peripherals.spi2,
         peripherals.pins.gpio9,
@@ -2026,10 +2035,38 @@ fn run_lunarcore() -> ! {
         &SpiDriverConfig::default(),
         &spi_config,
     ).unwrap();
+    #[cfg(feature = "board-heltec")]
     let nss = PinDriver::output(peripherals.pins.gpio8).unwrap();
+    #[cfg(feature = "board-heltec")]
     let reset = PinDriver::output(peripherals.pins.gpio12).unwrap();
+    #[cfg(feature = "board-heltec")]
     let busy = PinDriver::input(peripherals.pins.gpio13).unwrap();
+    #[cfg(feature = "board-heltec")]
     let mut dio1 = PinDriver::input(peripherals.pins.gpio14).unwrap();
+
+    #[cfg(feature = "board-xiao-wio")]
+    let spi_config = esp_idf_hal::spi::config::Config::new()
+        .baudrate(Hertz(8_000_000))
+        .data_mode(embedded_hal::spi::MODE_0);
+    #[cfg(feature = "board-xiao-wio")]
+    let spi = SpiDeviceDriver::new_single(
+        peripherals.spi2,
+        peripherals.pins.gpio7,
+        peripherals.pins.gpio9,
+        Some(peripherals.pins.gpio8),
+        Option::<Gpio0>::None,
+        &SpiDriverConfig::default(),
+        &spi_config,
+    ).unwrap();
+    #[cfg(feature = "board-xiao-wio")]
+    let nss = PinDriver::output(peripherals.pins.gpio3).unwrap();
+    #[cfg(feature = "board-xiao-wio")]
+    let reset = PinDriver::output(peripherals.pins.gpio1).unwrap();
+    #[cfg(feature = "board-xiao-wio")]
+    let busy = PinDriver::input(peripherals.pins.gpio0).unwrap();
+    #[cfg(feature = "board-xiao-wio")]
+    let mut dio1 = PinDriver::input(peripherals.pins.gpio2).unwrap();
+
     dio1.set_pull(Pull::Down).unwrap();
     dio1.set_interrupt_type(esp_idf_hal::gpio::InterruptType::PosEdge).unwrap();
     log::info!("[INIT] SPI OK");
@@ -2077,14 +2114,24 @@ fn run_lunarcore() -> ! {
 
     init_watchdog();
 
-
+    #[cfg(feature = "board-heltec")]
     let adc1 = AdcDriver::new(peripherals.adc1).unwrap();
+    #[cfg(feature = "board-heltec")]
     let adc_config = AdcChannelConfig {
         attenuation: DB_11,
         ..Default::default()
     };
+    #[cfg(feature = "board-heltec")]
     let mut battery_channel = AdcChannelDriver::new(&adc1, peripherals.pins.gpio1, &adc_config).unwrap();
+    #[cfg(feature = "board-heltec")]
     log::info!("[INIT] ADC OK");
+
+    #[cfg(feature = "board-xiao-wio")]
+    {
+        lunarcore.battery.voltage_mv = 4200;
+        lunarcore.battery.percentage = 100;
+        lunarcore.battery.is_charging = true;
+    }
 
     log::info!("========================================");
     log::info!("  Protocols: MeshCore, Meshtastic, KISS");
@@ -2116,6 +2163,7 @@ fn run_lunarcore() -> ! {
 
 
     let mut last_second = 0u32;
+    #[cfg(feature = "board-heltec")]
     let mut battery_check_interval = 0u32;
     let mut last_beacon_time = 0u32;
 
@@ -2212,6 +2260,7 @@ fn run_lunarcore() -> ! {
         }
 
 
+        #[cfg(feature = "board-heltec")]
         if now.wrapping_sub(battery_check_interval) >= 10_000 {
             battery_check_interval = now;
             if let Ok(adc_value) = adc1.read(&mut battery_channel) {
@@ -2252,6 +2301,7 @@ fn run_lunarcore() -> ! {
             lunarcore.stats.uptime_seconds = current_second;
 
 
+            #[cfg(feature = "board-heltec")]
             if current_second % 2 == 0 {
                 let protocol_name = match lunarcore.serial_protocol {
                     Protocol::MeshCore => "MeshCore",

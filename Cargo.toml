@@ -23,10 +23,12 @@ log = "0.4"
 embuild = "0.33"
 
 [features]
-default = ["ble"]
+default = ["ble", "board-heltec"]
 ble = []
 meshtastic = []
 rnode = []
+board-heltec = []
+board-xiao-wio = []
 
 [profile.release]
 opt-level = "s"
