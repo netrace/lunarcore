@@ -1,22 +1,10 @@
-// XIAO ESP32S3 + Wio-SX1262 Pin Configuration
+// Seeed XIAO ESP32S3 + Wio-SX1262 pin definitions
 
-// Define pin configurations for the XIAO ESP32S3 with the Wio-SX1262 module
-
-// Pin Definitions
-const BUTTON_PIN: u8 = 0; // Example pin for a button
-const LED_PIN: u8 = 1; // Example pin for an LED
-
-// Initialize functions to set up the pins
-fn setup() {
-    pinMode(BUTTON_PIN, INPUT);
-    pinMode(LED_PIN, OUTPUT);
-}
-
-fn loop() {
-    // Main loop code
-    if (digitalRead(BUTTON_PIN) == HIGH) {
-        digitalWrite(LED_PIN, HIGH); // Turn LED on
-    } else {
-        digitalWrite(LED_PIN, LOW); // Turn LED off
-    }
-}
+pub const SCK: u8 = 7;
+pub const MOSI: u8 = 9;
+pub const MISO: u8 = 8;
+pub const NSS: u8 = 41;
+pub const RST: u8 = 42;
+pub const BUSY: u8 = 40;
+pub const DIO1: u8 = 39;
+pub const ANT_SW: u8 = 38;
