@@ -66,5 +66,5 @@ pub mod xiao_wio {
 #[cfg(feature = "board-heltec")]
 pub type SelectedBoard = heltec::HeltecV3;
 
-#[cfg(feature = "board-xiao-wio")]
+#[cfg(all(feature = "board-xiao-wio", not(feature = "board-heltec")))]
 pub type SelectedBoard = xiao_wio::XiaoWio;

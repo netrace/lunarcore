@@ -43,7 +43,7 @@ use ble::{BleManager, ServiceType};
 use session::{SessionManager, Session, SessionParams, SessionError, MessageHeader};
 use onion::{OnionRouter, OnionRoute, RouteHop, OnionPacket, OnionError, RouteBuilder};
 use transport::{WirePacket, AddressTranslator, UniversalAddress};
-use boards::SelectedBoard;
+use boards::{BoardPins, SelectedBoard};
 
 #[cfg(all(feature = "board-heltec", feature = "board-xiao-wio"))]
 compile_error!("Select only one board feature: board-heltec or board-xiao-wio.");
